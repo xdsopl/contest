@@ -1,0 +1,14 @@
+
+set logscale y 10
+set logscale x 2
+set xlabel "FFT size"
+set term png
+
+set ylabel "microseconds per FFT"
+set output "speed.png"
+plot "data.txt" u 1:5 w lp t 'FFTW', "data.txt" u 1:8 w lp t 'DSP::FFT'
+
+set ylabel "max error"
+set output "error.png"
+plot "data.txt" u 1:3 w lp t 'FFTW', "data.txt" u 1:6 w lp t 'DSP::FFT'
+
