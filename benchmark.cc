@@ -16,8 +16,12 @@ Copyright 2020 Ahmet Inan <inan@aicodix.de>
 #include "complex.hh"
 #include "fft.hh"
 
-template <int BINS, typename TYPE>
-static void test_FFTW(TYPE *a, TYPE *b, TYPE *c, int ffts)
+template <typename VALUE, typename CMPLX, int BINS>
+struct FFTW;
+
+template <typename TYPE, int BINS>
+struct FFTW<double, TYPE, BINS> {
+static void test(TYPE *a, TYPE *b, TYPE *c, int ffts)
 {
 	typedef typename TYPE::value_type value;
 
@@ -60,7 +64,54 @@ static void test_FFTW(TYPE *a, TYPE *b, TYPE *c, int ffts)
 		max_error_growth = std::max(max_error_growth, abs(a[i] - c[i]));
 
 	std::cout << ' ' << max_error << ' ' << max_error_growth << ' ' << usec;
-}
+}};
+
+template <typename TYPE, int BINS>
+struct FFTW<float, TYPE, BINS> {
+static void test(TYPE *a, TYPE *b, TYPE *c, int ffts)
+{
+	typedef typename TYPE::value_type value;
+
+	fftwf_plan fwd_ba = fftwf_plan_dft_1d(BINS, reinterpret_cast<fftwf_complex *>(a), reinterpret_cast<fftwf_complex *>(b), FFTW_FORWARD, FFTW_ESTIMATE|FFTW_PRESERVE_INPUT);
+	fftwf_plan bwd_cb = fftwf_plan_dft_1d(BINS, reinterpret_cast<fftwf_complex *>(b), reinterpret_cast<fftwf_complex *>(c), FFTW_BACKWARD, FFTW_ESTIMATE|FFTW_PRESERVE_INPUT);
+	fftwf_plan fwd_bc = fftwf_plan_dft_1d(BINS, reinterpret_cast<fftwf_complex *>(c), reinterpret_cast<fftwf_complex *>(b), FFTW_FORWARD, FFTW_ESTIMATE|FFTW_PRESERVE_INPUT);
+
+	value factor = value(1) / std::sqrt(value(BINS));
+	auto normalize = [factor](TYPE *a) {
+		for (int i = 0; i < BINS; ++i)
+			a[i] *= factor;
+	};
+
+	fftwf_execute(fwd_ba);
+	normalize(b);
+	fftwf_execute(bwd_cb);
+	normalize(c);
+
+	value max_error = 0;
+	for (int i = 0; i < BINS; ++i)
+		max_error = std::max(max_error, abs(a[i] - c[i]));
+
+	auto start = std::chrono::system_clock::now();
+	for (int i = 0; i < ffts; i += 2) {
+		fftwf_execute(fwd_bc);
+		normalize(b);
+		fftwf_execute(bwd_cb);
+		normalize(c);
+	}
+	auto end = std::chrono::system_clock::now();
+	auto dur = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	value usec = dur.count() / value(ffts);
+
+	fftwf_destroy_plan(fwd_ba);
+	fftwf_destroy_plan(bwd_cb);
+	fftwf_destroy_plan(fwd_bc);
+
+	value max_error_growth = 0;
+	for (int i = 0; i < BINS; ++i)
+		max_error_growth = std::max(max_error_growth, abs(a[i] - c[i]));
+
+	std::cout << ' ' << max_error << ' ' << max_error_growth << ' ' << usec;
+}};
 
 template <int BINS, typename TYPE>
 static void test_DSP_FFT(TYPE *a, TYPE *b, TYPE *c, int ffts)
@@ -127,7 +178,7 @@ static void test()
 
 	std::cout << BINS << " " << ffts;
 
-	test_FFTW<BINS, TYPE>(a, b, c, ffts);
+	FFTW<value, TYPE, BINS>::test(a, b, c, ffts);
 
 	test_DSP_FFT<BINS, TYPE>(a, b, c, ffts);
 
@@ -140,7 +191,11 @@ static void test()
 
 int main()
 {
+#if 0
+	typedef float value;
+#else
 	typedef double value;
+#endif
 #if 0
 	typedef std::complex<value> cmplx;
 #else
