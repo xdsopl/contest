@@ -8,7 +8,7 @@ CXX = clang++ -stdlib=libc++
 #CXX = g++
 
 test: benchmark
-	./benchmark
+	./benchmark | tee data.txt
 
 .PHONY: clean test
 
